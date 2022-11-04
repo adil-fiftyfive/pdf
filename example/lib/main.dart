@@ -1,9 +1,14 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:io' as IO show Platform;
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdftron_flutter/pdftron_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 // If you are using local files, add the permission_handler
 // dependency to pubspec.yaml and uncomment the line below.
 // import 'package:permission_handler/permission_handler.dart';
@@ -24,13 +29,15 @@ class MyApp extends StatelessWidget {
 
 class Viewer extends StatefulWidget {
   @override
-  _ViewerState createState() => _ViewerState();
+  State<StatefulWidget> createState() => _ViewerState();
 }
 
 class _ViewerState extends State<Viewer> {
   String _version = 'Unknown';
-  String _document =
-      "https://pdftron.s3.amazonaws.com/downloads/pl/PDFTRON_mobile_about.pdf";
+  String _document = "";
+
+  //"/data/user/0/com.pdftron.pdftronflutterexample/cache/file_picker/sample.pdf";
+  //"https://pdftron.s3.amazonaws.com/downloads/pl/PDFTRON_mobile_about.pdf";
   bool _showViewer = true;
 
   @override
@@ -45,20 +52,38 @@ class _ViewerState extends State<Viewer> {
     // * Remove the above line `showViewer();`.
     // * Change the _document field to your local filepath.
     // * Uncomment the section below, including launchWithPermission().
-    // if (Platform.isIOS) {
-    // showViewer(); // Permission not required for iOS.
-    // } else {
-    // launchWithPermission(); // Permission required for Android.
-    // }
+    if (IO.Platform.isIOS) {
+      showViewer(); // Permission not required for iOS.
+    } else {
+      launchWithPermission(); // Permission required for Android.
+    }
   }
 
   // Uncomment this if you are using local files:
-  // Future<void> launchWithPermission() async {
-  //  PermissionStatus permission = await Permission.storage.request();
-  //  if (permission.isGranted) {
-  //    showViewer();
-  //  }
-  // }
+  Future<void> launchWithPermission() async {
+    PermissionStatus permission = await Permission.storage.request();
+    if (permission.isGranted) {
+      pickFile();
+    }
+  }
+
+  void pickFile() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['pdf'],
+          allowMultiple: false);
+      if (result != null) {
+        showViewer();
+        setState(() {
+          _document = result.files[0].path ?? "";
+          print("path: $_document");
+        });
+      }
+    } catch (e) {
+      print("exception $e");
+    }
+  }
 
   // Platform messages are asynchronous, so initialize in an async method.
   Future<void> initPlatformState() async {
@@ -86,7 +111,7 @@ class _ViewerState extends State<Viewer> {
 
   void showViewer() async {
     // Opening without a config file will have all functionality enabled.
-    // await PdftronFlutter.openDocument(_document);
+    await PdftronFlutter.openDocument(_document);
 
     var config = Config();
     // How to disable functionality:
@@ -158,12 +183,29 @@ class _ViewerState extends State<Viewer> {
     });
 
     var path = await PdftronFlutter.saveDocument();
+    path = saveFile(path);
     print("flutter save: $path");
 
     // To cancel event:
     // annotCancel();
     // bookmarkCancel();
     // documentLoadedCancel();
+  }
+
+  saveFile(String? filePath) async {
+    Directory? directory;
+    if(Platform.isIOS) {
+      directory = await getApplicationDocumentsDirectory();
+    } else {
+      directory = Directory('/storage/emulated/0/Download');
+      if (!await directory.exists())
+        directory = await getExternalStorageDirectory();
+    }
+
+    final newFile = File('${directory?.path}/some.pdf');
+    print("app storage path: ${newFile.path}");
+    File(filePath!).copy(newFile.path);
+    return newFile.path;
   }
 
   @override
